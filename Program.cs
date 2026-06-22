@@ -16,7 +16,9 @@ string accountId    = GetRequired("R2_ACCOUNT_ID");
 string accessKey    = GetRequired("R2_ACCESS_KEY");
 string secretKey    = GetRequired("R2_SECRET_KEY");
 string bucket       = GetRequired("R2_BUCKET");
-string jurisdiction = Environment.GetEnvironmentVariable("R2_JURISDICTION") ?? "eu";
+// NOTE: an EU *location hint* is NOT a jurisdiction — those buckets use the
+// default endpoint. Only set R2_JURISDICTION=eu for true EU-jurisdiction buckets.
+string jurisdiction = Environment.GetEnvironmentVariable("R2_JURISDICTION") ?? "";
 
 // File to upload: first CLI arg, or default to test-doc.txt next to the project.
 string filePath = args.Length > 0 ? args[0] : "test-doc.txt";
