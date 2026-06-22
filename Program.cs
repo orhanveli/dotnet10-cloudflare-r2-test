@@ -28,8 +28,22 @@ if (!File.Exists(filePath))
     return 1;
 }
 
-// Object key in the bucket: second CLI arg, or the file name.
-string key = args.Length > 1 ? args[1] : Path.GetFileName(filePath);
+// Object key in the bucket: second CLI arg wins; otherwise the file name,
+// placed under the optional R2_PREFIX "folder" (e.g. "kt-infografik/").
+// R2/S3 has no real folders — a prefix ending in "/" just groups objects.
+string key;
+if (args.Length > 1)
+{
+    key = args[1];
+}
+else
+{
+    string prefix = Environment.GetEnvironmentVariable("R2_PREFIX") ?? "";
+    prefix = prefix.Trim().TrimStart('/');
+    if (prefix.Length > 0 && !prefix.EndsWith('/'))
+        prefix += "/";
+    key = prefix + Path.GetFileName(filePath);
+}
 
 // R2's S3-compatible endpoint. Region must be "auto" for R2.
 // Jurisdictional buckets (e.g. EU) use a host segment: <account>.eu.r2...

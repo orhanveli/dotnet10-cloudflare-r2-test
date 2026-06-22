@@ -15,6 +15,7 @@ committed to source:
 | `R2_SECRET_KEY`   | R2 API token **Secret Access Key**           |
 | `R2_BUCKET`       | The bucket name you created                  |
 | `R2_JURISDICTION` | Optional: `eu` or `fedramp`; empty = default |
+| `R2_PREFIX`       | Optional "folder" prefix, e.g. `kt-infografik/` |
 
 > Find your Account ID and create/copy API token keys in the Cloudflare
 > dashboard under **R2 → Manage R2 API Tokens**.
