@@ -1,6 +1,9 @@
 using Amazon.S3;
 using Amazon.S3.Model;
-using Amazon.S3.Transfer;
+
+// Load variables from a .env file (if present) into the environment.
+// Real environment variables take precedence and are never overwritten.
+LoadDotEnv(".env");
 
 // --- Configuration (read from environment variables) ---
 // R2_ACCOUNT_ID    : your Cloudflare account ID
@@ -39,6 +42,11 @@ var config = new AmazonS3Config
     // R2 requires path-style or virtual-hosted; SDK handles this fine by default,
     // but forcing path style avoids DNS issues with custom bucket names.
     ForcePathStyle = true,
+    // R2 does not implement the SDK's default streaming checksum trailer
+    // (STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER). Only send checksums when
+    // explicitly required so uploads work against R2.
+    RequestChecksumCalculation = Amazon.Runtime.RequestChecksumCalculation.WHEN_REQUIRED,
+    ResponseChecksumValidation = Amazon.Runtime.ResponseChecksumValidation.WHEN_REQUIRED,
 };
 
 using var client = new AmazonS3Client(accessKey, secretKey, config);
@@ -47,8 +55,16 @@ Console.WriteLine($"Uploading {Path.GetFullPath(filePath)} -> r2://{bucket}/{key
 
 try
 {
-    var transfer = new TransferUtility(client);
-    await transfer.UploadAsync(filePath, bucket, key);
+    var request = new PutObjectRequest
+    {
+        BucketName = bucket,
+        Key = key,
+        FilePath = filePath,
+        // R2 does not support the chunked streaming signature
+        // (STREAMING-AWS4-HMAC-SHA256-PAYLOAD); send a single signed payload.
+        UseChunkEncoding = false,
+    };
+    await client.PutObjectAsync(request);
 
     Console.WriteLine("Upload complete.");
 
@@ -61,6 +77,44 @@ catch (AmazonS3Exception ex)
 {
     Console.Error.WriteLine($"R2 error: {ex.StatusCode} - {ex.Message}");
     return 1;
+}
+
+// Minimal .env parser: KEY=VALUE per line. Supports comments (#), blank lines,
+// optional "export " prefix, and single/double quoted values. Existing
+// environment variables are not overwritten.
+static void LoadDotEnv(string path)
+{
+    if (!File.Exists(path))
+        return;
+
+    foreach (string raw in File.ReadAllLines(path))
+    {
+        string line = raw.Trim();
+        if (line.Length == 0 || line.StartsWith('#'))
+            continue;
+
+        if (line.StartsWith("export ", StringComparison.Ordinal))
+            line = line["export ".Length..].TrimStart();
+
+        int eq = line.IndexOf('=');
+        if (eq <= 0)
+            continue;
+
+        string keyName = line[..eq].Trim();
+        string value = line[(eq + 1)..].Trim();
+
+        // Strip a single matching pair of surrounding quotes.
+        if (value.Length >= 2 &&
+            ((value[0] == '"' && value[^1] == '"') ||
+             (value[0] == '\'' && value[^1] == '\'')))
+        {
+            value = value[1..^1];
+        }
+
+        // Don't clobber a value already set in the real environment.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(keyName)))
+            Environment.SetEnvironmentVariable(keyName, value);
+    }
 }
 
 static string GetRequired(string name)
